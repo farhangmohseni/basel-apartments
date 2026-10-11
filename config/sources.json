@@ -1,0 +1,144 @@
+{
+  "_comment": "Websites watched by the generic monitor. Add any broker/developer page that lists objects for sale. Fields: name, url, type (broker|developer|bank|portal), optional link_pattern (regex on the link path), optional hosts (extra allowed link domains), optional canton_hint. Sites that only render with JavaScript (e.g. Team Lindenberger, Kovacs, BLKB, Mobimo) cannot be monitored this way and are listed under 'Check manually' in the app.",
+  "sites": [
+    {
+      "name": "LIBA & Partner Immobilien",
+      "type": "broker",
+      "url": "https://angebot.liba-immobilien.ch/de/wohnung-kaufen",
+      "link_pattern": "/o/zu-verkaufen",
+      "strip_query": true
+    },
+    {
+      "name": "Suter Immobilien Treuhand (Binningen)",
+      "type": "broker",
+      "url": "https://suter-immo.ch/immobilien/",
+      "link_pattern": "/immobilien/\\d+"
+    },
+    {
+      "name": "Immoline Basel",
+      "type": "broker",
+      "url": "https://www.immoline.ch/angebote/index.php?rubrik=1"
+    },
+    {
+      "name": "Immobilien-Team Daniel Schweizer",
+      "type": "broker",
+      "url": "https://immoteam-schweizer.ch/immobilien",
+      "link_pattern": "/immobilien/\\d+"
+    },
+    {
+      "name": "MN Immobilien",
+      "type": "broker",
+      "url": "https://www.mn-immobilien.ch/zuverkaufen",
+      "link_pattern": "/o/zu-verkaufen",
+      "strip_query": true
+    },
+    {
+      "name": "Woodtli Immobilien-Treuhand (Sissach)",
+      "type": "broker",
+      "url": "https://www.wooimmo.ch/angebote/"
+    },
+    {
+      "name": "Livendo Immobilien (Liestal)",
+      "type": "broker",
+      "url": "https://livendo-immobilien.ch/immobilien/",
+      "link_pattern": "/immobilien/\\d+"
+    },
+    {
+      "name": "Immoanker",
+      "type": "broker",
+      "url": "https://immoanker.ch/immobilien/",
+      "link_pattern": "/immobilien/\\d+",
+      "require_zip": true
+    },
+    {
+      "name": "ImmoMensch (Binningen)",
+      "type": "broker",
+      "url": "https://829.immomigsa.ch/de",
+      "link_pattern": "/o/zu-verkaufen",
+      "strip_query": true
+    },
+    {
+      "name": "Homevisit",
+      "type": "broker",
+      "url": "https://angebot.home-visit.ch/de/objects-sale",
+      "link_pattern": "/o/zu-verkaufen",
+      "strip_query": true,
+      "require_zip": true
+    },
+    {
+      "name": "Blauenstein Immobilien (Riehen)",
+      "type": "broker",
+      "url": "https://www.blauenstein-immobilien.ch/de/ol/39922",
+      "link_pattern": "/o/zu-verkaufen",
+      "strip_query": true,
+      "require_zip": true
+    },
+    {
+      "name": "Avenaris Immobilien",
+      "type": "broker",
+      "url": "https://immo.avenaris.com/de/objects-sale",
+      "link_pattern": "/o/zu-verkaufen",
+      "strip_query": true,
+      "require_zip": true
+    },
+    {
+      "name": "Immo Family",
+      "type": "broker",
+      "url": "https://immofamily.immomigsa.ch/de",
+      "link_pattern": "/o/zu-verkaufen",
+      "strip_query": true
+    },
+    {
+      "name": "CK Solutions",
+      "type": "broker",
+      "url": "https://casaframe.ch/de/publisher/MKUfTtPT1k3uLDJK85OZCtLD3ovsv8YJ/"
+    },
+    {
+      "name": "Futuro Immobilien - Neubauprojekte",
+      "type": "developer",
+      "url": "https://futuro-immobilien.ch/de/neubauprojekte"
+    },
+    {
+      "name": "Raiffeisen Immomakler - Basel-Stadt",
+      "type": "bank",
+      "url": "https://immo.raiffeisen.ch/immobilien-kaufen/wohnung/kanton-basel-stadt/"
+    },
+    {
+      "name": "Raiffeisen Immomakler - Basel-Landschaft",
+      "type": "bank",
+      "url": "https://immo.raiffeisen.ch/immobilien-kaufen/wohnung/kanton-basel-landschaft/"
+    },
+    {
+      "name": "Neubauprojekte.ch - Basel-Stadt",
+      "type": "portal",
+      "url": "https://www.neubauprojekte.ch/tag/basel-stadt/"
+    },
+    {
+      "name": "Neubauprojekte.ch - Basel-Landschaft",
+      "type": "portal",
+      "url": "https://www.neubauprojekte.ch/kaufen/?mainCategory=apartment_and_house&offerType=sale&orderBy=created&order=desc&page=1&states=Basel-Landschaft&type=all"
+    },
+    {
+      "name": "immobilier.ch - Basel-Stadt",
+      "type": "portal",
+      "url": "https://www.immobilier.ch/de/kaufen/wohnung/basel-stadt",
+      "link_pattern": "/de/kaufen/wohnung/basel-(stadt|landschaft)/[^/?]+/[^/?]+"
+    },
+    {
+      "name": "Acheteur.ch (Neho) - Basel-Stadt",
+      "type": "portal",
+      "url": "https://acheteur.ch/de/wohnung-kaufen/basel-stadt/kanton-basel-stadt"
+    },
+    {
+      "name": "Acheteur.ch (Neho) - Basel-Landschaft",
+      "type": "portal",
+      "url": "https://acheteur.ch/de/wohnung-kaufen/basel-landschaft"
+    },
+    {
+      "name": "immobilier.ch - Basel-Landschaft",
+      "type": "portal",
+      "url": "https://www.immobilier.ch/de/kaufen/wohnung/basel-landschaft",
+      "link_pattern": "/de/kaufen/wohnung/basel-(stadt|landschaft)/[^/?]+/[^/?]+"
+    }
+  ]
+}

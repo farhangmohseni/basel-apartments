@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Basel Apartment Finder</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <button id="toggleFilters" class="icon-btn only-mobile" aria-label="Filters">☰ Filters</button>
+    <h1>Basel Apartment Finder</h1>
+    <span id="stats" class="muted"></span>
+  </div>
+  <nav class="tabs" role="tablist">
+    <button data-view="list" class="active">List</button>
+    <button data-view="map">Map</button>
+    <button data-view="table">Table</button>
+    <button data-view="favs">Favorites <span id="favCount" class="pill"></span></button>
+    <button data-view="finance">Budget & Market</button>
+    <button data-view="sources">Sources</button>
+  </nav>
+</header>
+
+<div class="layout">
+  <aside id="filters" class="filters">
+    <div class="filter-head">
+      <strong><span id="resultCount">0</span> results</strong>
+      <span><button id="resetFilters" class="link-btn">Reset</button>
+      <button id="closeFilters" class="btn only-mobile">Done</button></span>
+    </div>
+
+    <section>
+      <label class="lbl" for="q">Search (title, text, address, agency)</label>
+      <input id="q" type="search" placeholder="e.g. Rhein, Bruderholz, Attika">
+      <label class="lbl" for="qx">Exclude words (comma separated)</label>
+      <input id="qx" type="search" placeholder="e.g. Baurecht, vermietet">
+    </section>
+
+    <section>
+      <div class="lbl">Price (CHF)</div>
+      <div class="pair"><input id="priceMin" type="number" step="50000" placeholder="min"><input id="priceMax" type="number" step="50000" placeholder="max"></div>
+      <div class="lbl">Rooms</div>
+      <div class="pair"><input id="roomsMin" type="number" step="0.5" placeholder="min"><input id="roomsMax" type="number" step="0.5" placeholder="max"></div>
+      <div class="lbl">Living area (m²)</div>
+      <div class="pair"><input id="areaMin" type="number" step="5" placeholder="min"><input id="areaMax" type="number" step="5" placeholder="max"></div>
+      <div class="lbl">Price per m² (CHF)</div>
+      <div class="pair"><input id="ppmMin" type="number" step="500" placeholder="min"><input id="ppmMax" type="number" step="500" placeholder="max"></div>
+      <div class="lbl">Year built</div>
+      <div class="pair"><input id="yearMin" type="number" placeholder="from"><input id="yearMax" type="number" placeholder="to"></div>
+      <div class="lbl">Floor</div>
+      <div class="pair"><input id="floorMin" type="number" placeholder="min (0=ground)"><input id="floorMax" type="number" placeholder="max"></div>
+      <div class="lbl">Bathrooms (min)</div>
+      <input id="bathMin" type="number" min="1" placeholder="any">
+      <label class="chk"><input id="includeMissing" type="checkbox" checked> Keep ads where the value is missing</label>
+    </section>
+
+    <section>
+      <div class="lbl">Canton</div>
+      <div class="chips" id="cantonChips"></div>
+      <div class="lbl">District</div>
+      <div class="chips" id="districtChips"></div>
+      <div class="lbl">Municipalities <button id="muniClear" class="link-btn small">clear</button></div>
+      <input id="muniSearch" type="search" placeholder="Search municipality…">
+      <div id="muniList" class="checklist"></div>
+      <div class="lbl">Postcodes (comma separated)</div>
+      <input id="zips" type="text" placeholder="e.g. 4052, 4059, 4125">
+    </section>
+
+    <section>
+      <div class="lbl">Distance to</div>
+      <select id="refPoint"></select>
+      <div class="pair"><input id="maxKm" type="number" step="0.5" min="0" placeholder="max km (straight line)"><span class="muted small" id="refHint"></span></div>
+    </section>
+
+    <section>
+      <div class="lbl">Property type</div>
+      <div class="chips" id="typeChips"></div>
+      <div class="lbl">Features <span class="muted small">(click once = must have, twice = exclude)</span></div>
+      <div class="chips" id="featureChips"></div>
+      <div class="lbl">Warnings</div>
+      <div class="chips" id="warnChips"></div>
+    </section>
+
+    <section>
+      <div class="lbl">Listed within</div>
+      <select id="age">
+        <option value="">any time</option><option value="1">new today</option><option value="3">last 3 days</option>
+        <option value="7">last 7 days</option><option value="14">last 14 days</option><option value="30">last 30 days</option>
+      </select>
+      <div class="lbl">Online for at least (days)</div>
+      <input id="minDays" type="number" min="0" placeholder="e.g. 60 = room to negotiate">
+      <label class="chk"><input id="onlyDrops" type="checkbox"> only with price reduction</label>
+      <label class="chk"><input id="withPrice" type="checkbox"> only with a price</label>
+      <label class="chk"><input id="withPhoto" type="checkbox"> only with photos</label>
+      <label class="chk"><input id="withCoords" type="checkbox"> only with exact map position</label>
+      <label class="chk"><input id="privateOnly" type="checkbox"> only private sellers</label>
+      <label class="chk"><input id="multiSource" type="checkbox"> listed on several portals</label>
+      <label class="chk"><input id="showInactive" type="checkbox"> include removed / sold</label>
+      <label class="chk"><input id="showHidden" type="checkbox"> show hidden ads</label>
+      <label class="chk"><input id="affordableOnly" type="checkbox"> only affordable (see Budget tab)</label>
+    </section>
+
+    <section>
+      <div class="lbl">Sources</div>
+      <div id="sourceList" class="checklist"></div>
+      <div class="lbl">Agency / seller</div>
+      <input id="agency" type="search" placeholder="Name contains…">
+    </section>
+
+    <section>
+      <div class="lbl">Sort by</div>
+      <select id="sort">
+        <option value="new">Newest first</option>
+        <option value="priceAsc">Price ↑</option>
+        <option value="priceDesc">Price ↓</option>
+        <option value="ppmAsc">Price per m² ↑</option>
+        <option value="areaDesc">Living area ↓</option>
+        <option value="roomsDesc">Rooms ↓</option>
+        <option value="distAsc">Distance ↑</option>
+        <option value="dropDesc">Biggest price cut</option>
+        <option value="daysDesc">Longest online</option>
+        <option value="score">Best value (price/m² vs. municipality)</option>
+      </select>
+    </section>
+
+    <section class="preset-box">
+      <div class="lbl">Saved searches</div>
+      <div class="pair"><input id="presetName" type="text" placeholder="Name"><button id="savePreset" class="btn">Save</button></div>
+      <div id="presetList"></div>
+      <button id="shareLink" class="btn wide">🔗 Copy link with these filters</button>
+      <button id="emailFilter" class="btn wide">✉️ Copy as e-mail filter (JSON)</button>
+      <p class="muted small">Paste the JSON into <code>config/email_filters.json</code> in the GitHub repo – the daily e-mail then only contains matching ads.</p>
+    </section>
+  </aside>
+
+  <main id="main">
+    <div id="banner" class="banner" hidden></div>
+    <section id="view-list" class="view active">
+      <div id="cards" class="cards"></div>
+      <div class="more-wrap"><button id="more" class="btn" hidden>Show more</button></div>
+    </section>
+    <section id="view-map" class="view"><div id="map"></div><p class="muted small" id="mapNote"></p></section>
+    <section id="view-table" class="view"><div class="table-wrap"><table id="table"></table></div></section>
+    <section id="view-favs" class="view">
+      <div class="fav-tools">
+        <button id="exportFavs" class="btn">Export favorites & notes</button>
+        <button id="importFavs" class="btn">Import</button>
+        <span class="muted small">To share with your partner: copy the export code and import it on the other device.</span>
+      </div>
+      <div id="favCards" class="cards"></div>
+    </section>
+    <section id="view-finance" class="view"><div id="finance"></div></section>
+    <section id="view-sources" class="view"><div id="sources"></div></section>
+  </main>
+</div>
+
+<dialog id="detail"><div id="detailBody"></div></dialog>
+<dialog id="ioDialog">
+  <form method="dialog" class="io">
+    <h3 id="ioTitle"></h3>
+    <textarea id="ioText" rows="10"></textarea>
+    <div class="io-actions"><button value="cancel" class="btn">Close</button><button id="ioOk" value="ok" class="btn primary">OK</button></div>
+  </form>
+</dialog>
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script src="app.js"></script>
+</body>
+</html>
