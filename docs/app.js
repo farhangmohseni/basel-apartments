@@ -115,8 +115,8 @@ async function load() {
     p._lat = p.lat || (C[p.municipality] || [])[0]; p._lng = p.lng || (C[p.municipality] || [])[1];
     p._score = p.price_per_m2 && M[p.municipality] ? p.price_per_m2 / M[p.municipality] - 1 : null;
     const ph = p.price_history || [];
-    const maxP = ph.length ? Math.max(...ph.map(h => h[1])) : null;
-    p._dropPct = maxP && p.price && p.price < maxP ? (maxP - p.price) / maxP : 0;
+    const maxP = ph.length ? Math.max(...ph.map(h => h[1])) : null, lastP = ph.length ? ph[ph.length - 1][1] : null;
+    p._dropPct = maxP && lastP && lastP < maxP ? (maxP - lastP) / maxP : 0;
     p._oldPrice = p._dropPct ? maxP : null;
     p._isNew = !p.baseline && daysBetween(p.first_seen, TODAY) <= 1;
   }

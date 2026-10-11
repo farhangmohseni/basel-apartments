@@ -20,6 +20,9 @@ DEFAULT_HEADERS = {
 }
 
 
+FALLBACK_FINGERPRINTS = ("safari", "firefox")
+
+
 class Blocked(Exception):
     """The site is refusing us (bot protection / rate limit). Stop this source."""
 
@@ -32,6 +35,7 @@ class Http:
         self._last = {}
         self._lock = threading.Lock()
         self._session = cffi_requests.Session(impersonate="chrome")
+        self._alt = {}  # host -> (fallback level, session with another browser fingerprint) after a 403
         self.request_count = 0
 
     def _wait_turn(self, host, min_delay, max_delay):
@@ -49,10 +53,11 @@ class Http:
         last_exc = None
         for attempt in range(retries + 1):
             self._wait_turn(host, lo, hi)
+            level, session = self._alt.get(host, (0, self._session))
             try:
                 self.request_count += 1
-                r = self._session.get(url, params=params, timeout=self.timeout,
-                                      headers={**DEFAULT_HEADERS, **(headers or {})})
+                r = session.get(url, params=params, timeout=self.timeout,
+                                headers={**DEFAULT_HEADERS, **(headers or {})})
             except Exception as e:  # network error
                 last_exc = e
                 log.warning("GET %s failed (%s), attempt %d", url, e, attempt + 1)
@@ -62,6 +67,11 @@ class Http:
                 return r
             if r.status_code == 404 and allow_404:
                 return None
+            if r.status_code == 403 and level < len(FALLBACK_FINGERPRINTS) and attempt < retries:
+                # some sites block only one TLS fingerprint (e.g. from cloud IPs): try another browser
+                self._alt[host] = (level + 1, cffi_requests.Session(impersonate=FALLBACK_FINGERPRINTS[level]))
+                log.info("%s answered 403, retrying as %s", host, FALLBACK_FINGERPRINTS[level])
+                continue
             if r.status_code in (403, 401) or (r.status_code == 429 and attempt == retries):
                 raise Blocked(f"{host} answered {r.status_code}")
             if r.status_code in (429, 500, 502, 503, 504):

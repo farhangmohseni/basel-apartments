@@ -164,7 +164,9 @@ def merge(state, results, run_day):
             by_zip.setdefault(str(p["zip"]), set()).add(p["id"])
 
     known_sources = set(state.get("sources", {}).keys())
-    before = {pid: p.get("price") for pid, p in props.items()}
+    # per-ad prices before this run: a price change only counts when the *same ad* changes its price,
+    # not when another portal with a slightly different price becomes the displayed source
+    before = {lk: l["data"].get("price") for p in props.values() for lk, l in p["listings"].items()}
     new_ids, price_changes = [], []
 
     def order(res):
@@ -249,16 +251,29 @@ def merge(state, results, run_day):
                 del props[b_id]
                 _apply_best(a)
 
-    # price history: compare with the price the property had before this run
+    # price history from ad-level changes
     for pid, p in props.items():
-        if p.get("last_seen") != run_day or not p.get("price") or p.get("numbers_hidden"):
+        if p.get("last_seen") != run_day or p.get("numbers_hidden"):
             continue
         hist = p.setdefault("price_history", [])
-        if not hist or hist[-1][1] != p["price"]:
-            old_price = before.get(pid)
+        changes = []
+        for lk, l in p["listings"].items():
+            old_p, new_p = before.get(lk), l["data"].get("price")
+            if l["last_seen"] == run_day and old_p and new_p and abs(new_p - old_p) / old_p > 0.005:
+                changes.append((_prio(l["source"]), old_p, new_p))
+        if changes:
+            _, old_p, new_p = min(changes)  # the most trusted source that changed
+            price_changes.append((pid, old_p, new_p))
+            if hist and hist[-1][0] == run_day:
+                hist[-1][1] = new_p
+            else:
+                if not hist:
+                    hist.append([run_day, old_p])
+                hist.append([run_day, new_p])
+        elif not hist and p.get("price"):
             hist.append([run_day, p["price"]])
-            if old_price and old_price != p["price"]:
-                price_changes.append((pid, old_price, p["price"]))
+        # collapse several entries of the same day (keep the last)
+        p["price_history"] = [h for i, h in enumerate(hist) if i == len(hist) - 1 or hist[i + 1][0] != h[0]]
 
     # activity / cleanup
     d_today = dt.date.fromisoformat(run_day)
@@ -343,11 +358,18 @@ def main():
     state.setdefault("runs", []).append({"day": run_day, "new": len(new_ids), "price_changes": len(price_changes),
                                          "active": active})
     state["runs"] = state["runs"][-60:]
-    save(state)
     log.info("done: %d active properties, %d new, %d price changes", active, len(new_ids), len(price_changes))
 
-    if not args.no_email:
+    # ads found in runs without an e-mail are carried over to the next e-mail
+    pending = state.get("pending", {"new": [], "price_changes": []})
+    new_ids = list(dict.fromkeys(pending["new"] + new_ids))
+    price_changes = [tuple(c) for c in pending["price_changes"]] + price_changes
+    if args.no_email:
+        state["pending"] = {"new": new_ids, "price_changes": price_changes}
+    else:
         emailer.send_daily(state, new_ids, price_changes, run_day)
+        state.pop("pending", None)
+    save(state)
 
 
 if __name__ == "__main__":

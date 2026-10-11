@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "15 4 * * *"   # every day 06:15 Swiss summer time / 05:15 winter time
   workflow_dispatch:        # "Run workflow" button for a manual run
+    inputs:
+      email:
+        description: "Send the e-mail (untick for a test run; new ads are then included in the next e-mail)"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -33,7 +38,7 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           APP_URL: ${{ vars.APP_URL }}
-        run: python -m scraper.run
+        run: python -m scraper.run ${{ github.event_name == 'workflow_dispatch' && !inputs.email && '--no-email' || '' }}
 
       - name: Save data
         if: always()
