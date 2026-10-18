@@ -31,8 +31,6 @@ const MANUAL_LINKS = [
   ["Homegate – buy apartment, Basel-Landschaft", "https://www.homegate.ch/kaufen/wohnung/kanton-basellandschaft/trefferliste?o=dateCreated-desc"],
   ["ImmoScout24 – Basel-Stadt", "https://www.immoscout24.ch/de/wohnung/kaufen/kanton-basel-stadt?o=dateCreated-desc"],
   ["ImmoScout24 – Basel-Landschaft", "https://www.immoscout24.ch/de/wohnung/kaufen/kanton-basel-landschaft?o=dateCreated-desc"],
-  ["Newhome (Kantonalbanken) – Basel-Stadt", "https://www.newhome.ch/de/kaufen/suchen/wohnung/kanton_basel-stadt/liste"],
-  ["Newhome – Basel-Landschaft", "https://www.newhome.ch/de/kaufen/suchen/wohnung/kanton_basel-landschaft/liste"],
   ["Comparis – Basel", "https://www.comparis.ch/immobilien/marktplatz/basel/wohnung/kaufen"],
   ["RealAdvisor – Basel-Stadt", "https://realadvisor.ch/de/kaufen/kanton-basel-stadt/wohnung"],
   ["RealAdvisor – Basel-Landschaft", "https://realadvisor.ch/de/kaufen/kanton-basel-landschaft/wohnung"],
@@ -397,7 +395,7 @@ function renderSources() {
   const runs = (DATA.runs || []).slice(-14).reverse();
   $("#sources").innerHTML = `
   <div class="panel"><h2>Automatically searched sources (${ent.length})</h2>
-    <p class="muted small">Portals and aggregators (Comparis and RealAdvisor bundle Homegate, ImmoScout24, Newhome, Flatfox, Properstar and many broker feeds), classifieds (tutti/anibis/ricardo) and the websites of local brokers, banks and developers. Duplicate ads are merged into one.</p>
+    <p class="muted small">Aggregators (Comparis and RealAdvisor bundle Homegate, ImmoScout24, Flatfox, Properstar and many broker feeds), portals (Newhome – the cantonal banks' portal –, Flatfox, Homegate/ImmoScout24), classifieds (tutti/anibis/ricardo) and the websites of local brokers, banks and developers. Duplicate ads are merged into one.</p>
     <div class="table-wrap"><table><thead><tr><th>Source</th><th>Type</th><th>Status</th><th class="num">Ads</th><th>Last OK</th></tr></thead><tbody>
     ${ent.map(([k, s]) => `<tr><td>${s.url ? `<a href="${esc(safeUrl(s.url))}" target="_blank" rel="noopener">${esc(s.label)}</a>` : esc(s.label)}</td><td>${esc(s.kind)}</td>
       <td class="${s.status === "ok" ? "status-ok" : "status-bad"}">${esc(s.status)}</td><td class="num">${s.count ?? ""}</td><td>${esc(s.last_ok || "–")}</td></tr>`).join("")}

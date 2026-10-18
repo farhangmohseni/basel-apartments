@@ -1,5 +1,56 @@
 {
-  "_comment": "Websites watched by the generic monitor. Add any broker/developer page that lists objects for sale. Fields: name, url, type (broker|developer|bank|portal), optional link_pattern (regex on the link path), optional hosts (extra allowed link domains), optional canton_hint. Sites that only render with JavaScript (e.g. Team Lindenberger, Kovacs, BLKB, Mobimo) cannot be monitored this way and are listed under 'Check manually' in the app.",
+  "_comment": "Sources searched every day. 'portals' are the built-in scrapers (set enabled to false to switch one off); 'sites' are broker/developer pages watched by the generic monitor - add any page that lists objects for sale. Site fields: name, url, type (broker|developer|bank|portal), optional link_pattern (regex on the link path), optional hosts (extra allowed link domains), optional canton_hint, optional require_zip, optional strip_query. Sites that only render with JavaScript (e.g. Team Lindenberger, Kovacs, BLKB, Mobimo) cannot be monitored this way and are listed under 'Check manually' in the app.",
+  "portals": [
+    {
+      "key": "comparis",
+      "name": "Comparis",
+      "type": "aggregator",
+      "enabled": true,
+      "url": "https://www.comparis.ch/immobilien/marktplatz/basel/wohnung/kaufen"
+    },
+    {
+      "key": "realadvisor",
+      "name": "RealAdvisor",
+      "type": "aggregator",
+      "enabled": true,
+      "url": "https://realadvisor.ch/de/kaufen/kanton-basel-stadt/wohnung"
+    },
+    {
+      "key": "newhome",
+      "name": "Newhome",
+      "type": "portal",
+      "enabled": true,
+      "url": "https://www.newhome.ch/de/kaufen/suchen/wohnung/kanton_basel-stadt/liste"
+    },
+    {
+      "key": "homegate_is24",
+      "name": "Homegate / ImmoScout24 (via alle-immobilien.ch)",
+      "type": "portal",
+      "enabled": true,
+      "url": "https://www.alle-immobilien.ch/de/kaufen/wohnung/kanton-basel-stadt"
+    },
+    {
+      "key": "flatfox",
+      "name": "Flatfox",
+      "type": "portal",
+      "enabled": true,
+      "url": "https://flatfox.ch/de/search/?offer_type=SALE&object_category=APARTMENT"
+    },
+    {
+      "key": "engelvoelkers",
+      "name": "Engel & Völkers",
+      "type": "broker",
+      "enabled": true,
+      "url": "https://www.engelvoelkers.com/ch/de/immobilien/res/kaufen/wohnung/basel-stadt"
+    },
+    {
+      "key": "tutti",
+      "name": "tutti.ch / anibis",
+      "type": "classifieds",
+      "enabled": true,
+      "url": "https://www.tutti.ch/de/q/immobilien-wohnungen/Ak8CqcmVhbEVzdGF0ZZSRkqtsaXN0aW5nVHlwZalhcGFydG1lbnTAwMA"
+    }
+  ],
   "sites": [
     {
       "name": "LIBA & Partner Immobilien",

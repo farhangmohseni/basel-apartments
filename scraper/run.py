@@ -17,16 +17,16 @@ from . import emailer
 from .http import Blocked, Http
 from .listing import finalize, fingerprint, identical, make_id, similar
 from .regions import slugify
-from .sources import comparis, engelvoelkers, flatfox, generic, realadvisor, smg_satellite, tutti
+from .sources import comparis, engelvoelkers, flatfox, generic, newhome, realadvisor, smg_satellite, tutti
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "docs" / "data" / "listings.json"
 STALE_DAYS = 10        # not seen for this long -> marked inactive (probably sold / removed)
 DROP_AFTER_DAYS = 120  # inactive records are deleted after this long
 
-STRUCTURED = [comparis, realadvisor, flatfox, engelvoelkers, tutti, smg_satellite]
+STRUCTURED = [comparis, realadvisor, newhome, flatfox, engelvoelkers, tutti, smg_satellite]
 # which source's numbers we trust most when the same flat is on several portals
-PRIORITY = ["comparis", "realadvisor", "flatfox", "engelvoelkers", "web", "tutti", "homegate_is24"]
+PRIORITY = ["comparis", "realadvisor", "newhome", "flatfox", "engelvoelkers", "web", "tutti", "homegate_is24"]
 FIELDS = ["title", "description", "price", "rooms", "living_area", "usable_area", "price_per_m2", "floor",
           "bathrooms", "street", "zip", "municipality", "canton", "district", "lat", "lng", "year_built",
           "year_renovated", "agency", "agency_phone", "property_type", "type_label", "private_seller", "published"]
@@ -85,14 +85,16 @@ def scrape_all(only=None):
     http = Http()
     ctx = {"day": dt.date.today().toordinal()}
     out = []
-    with cf.ThreadPoolExecutor(max_workers=7) as ex:
-        futs = [ex.submit(run_source, m, http, ctx) for m in STRUCTURED if not only or m.NAME in only]
+    with cf.ThreadPoolExecutor(max_workers=8) as ex:
+        portals = {p["key"]: p for p in generic.load_config().get("portals", [])}
+        enabled = [m for m in STRUCTURED if portals.get(m.NAME, {}).get("enabled", True)]
+        futs = [ex.submit(run_source, m, http, ctx) for m in enabled if not only or m.NAME in only]
         gen_fut = ex.submit(run_generic, http, ctx) if not only or "web" in only else None
         for f in cf.as_completed(futs):
             name, label, recs, status, secs = f.result()
             log.info("%-14s %-10s %4d listings %4ds", name, status[:10], len(recs), secs)
             out.append({"key": name, "label": label, "recs": recs, "status": status, "secs": secs,
-                        "kind": "portal"})
+                        "kind": "portal", "url": portals.get(name, {}).get("url")})
         if gen_fut:
             for key, label, recs, status, secs, url, kind in gen_fut.result():
                 out.append({"key": key, "label": label, "recs": recs, "status": status, "secs": secs,
@@ -339,7 +341,7 @@ def main():
     ap.add_argument("--no-email", action="store_true")
     ap.add_argument("--save-cache", action="store_true", help="store raw scrape results in out/scrape_cache.json")
     ap.add_argument("--from-cache", action="store_true", help="skip scraping, re-use out/scrape_cache.json (development)")
-    ap.add_argument("--only", help="comma separated source keys (comparis,realadvisor,flatfox,engelvoelkers,tutti,homegate_is24,web)")
+    ap.add_argument("--only", help="comma separated source keys (comparis,realadvisor,newhome,flatfox,engelvoelkers,tutti,homegate_is24,web)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 

@@ -12,13 +12,15 @@ advertised on several sites, and e-mails you every morning with new ads and pric
 
 | Kind | Sources |
 |---|---|
-| Aggregators (cover Homegate, ImmoScout24, Newhome, Flatfox, Properstar, broker feeds) | RealAdvisor, Comparis |
-| Portals | Flatfox (API), Homegate / ImmoScout24 (through alle-immobilien.ch – links only), Engel & Völkers, Neubauprojekte.ch, immobilier.ch, Acheteur.ch (Neho), Raiffeisen Immomakler |
+| Aggregators (cover Homegate, ImmoScout24, Flatfox, Properstar, broker feeds) | RealAdvisor, Comparis |
+| Portals | Newhome (cantonal banks' portal, API), Flatfox (API), Homegate / ImmoScout24 (through alle-immobilien.ch – links only), Engel & Völkers, Neubauprojekte.ch, immobilier.ch, Acheteur.ch (Neho), Raiffeisen Immomakler |
 | Classifieds (private sellers) | tutti.ch / anibis / ricardo |
 | Local brokers | LIBA & Partner, Suter Immobilien, Immoline, Immobilien-Team Schweizer, MN Immobilien, Woodtli, Livendo, Immoanker, ImmoMensch, Homevisit, Blauenstein, Avenaris, Immo Family, CK Solutions, Futuro, … |
 | Check manually (block bots / JavaScript only) | listed in the app under **Sources → Check manually** |
 
-Add any further broker page in `config/sources.json` (name + URL; optionally a `link_pattern`).
+All sources are listed in `config/sources.json`: `portals` are the built-in scrapers (set `"enabled": false`
+to switch one off), `sites` are broker pages watched by the generic monitor – add any further broker page
+there (name + URL; optionally a `link_pattern`).
 
 ## One-time setup (≈ 15 minutes)
 
