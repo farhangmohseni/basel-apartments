@@ -1,21 +1,29 @@
 {
-  "_comment": "Criteria for the daily e-mail. null = no limit. Generate this JSON from the web app with 'Als E-Mail-Filter speichern' and paste it here.",
-  "price_min": null,
-  "price_max": null,
-  "rooms_min": null,
-  "rooms_max": null,
-  "area_min": null,
+  "price_min": 800000,
+  "price_max": 2000000,
+  "rooms_min": 3,
+  "rooms_max": 5,
+  "area_min": 80,
   "area_max": null,
   "price_per_m2_max": null,
   "year_built_min": null,
-  "cantons": ["BS", "BL"],
+  "cantons": [
+    "BS",
+    "BL"
+  ],
   "districts": [],
-  "municipalities": [],
+  "municipalities": [
+    "Basel",
+    "Binningen",
+    "Riehen"
+  ],
   "require_features": [],
-  "exclude_features": ["leasehold", "auction"],
-  "exclude_keywords": [],
+  "exclude_features": [],
+  "exclude_keywords": [
+    "Tauschwohnung"
+  ],
   "include_keywords_any": [],
   "exclude_types": [],
   "include_missing_values": true,
-  "include_unknown_location": true
+  "include_unknown_location": false
 }
