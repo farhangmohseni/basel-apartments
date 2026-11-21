@@ -74,6 +74,12 @@ def matches(p, f):
         return True
 
     miss = f.get("include_missing_values", True)
+    if f.get("require_rent") and not p.get("price"):
+        return False
+    if f.get("exact_address_only") and not p.get("commute_exact"):
+        return False
+    if f.get("private_only") and not p.get("private_seller"):
+        return False
     if not rng(p.get("price"), _get(f, "rent_min", "price_min"), _get(f, "rent_max", "price_max"), miss):
         return False
     if not rng(p.get("rooms"), f.get("rooms_min"), f.get("rooms_max"), miss):
@@ -109,6 +115,9 @@ def matches(p, f):
         if kw.lower() in text:
             return False
     if f.get("include_keywords_any") and not any(kw.lower() in text for kw in f["include_keywords_any"]):
+        return False
+    if any(kw.lower() not in f"{text} {p.get('street') or ''} {p.get('zip') or ''} {p.get('municipality') or ''} "
+           f"{p.get('agency') or ''}".lower() for kw in f.get("include_keywords_all", [])):
         return False
     return True
 

@@ -640,6 +640,8 @@ function emailFilterJson() {
     cantons: F.cantons, localities: F.places, types: F.types, exclude_types: [], furnished: F.furnished,
     require_features: Object.keys(all).filter(k => all[k] === 1), exclude_features: Object.keys(all).filter(k => all[k] === -1),
     exclude_keywords: F.qx.split(",").map(s => s.trim()).filter(Boolean), include_keywords_any: [],
+    include_keywords_all: F.q.toLowerCase().split(/\s+/).filter(Boolean),
+    require_rent: !!F.withPrice, exact_address_only: !!F.exactOnly, private_only: !!F.privateOnly,
     include_missing_values: !!F.includeMissing,
   }, null, 2);
 }
