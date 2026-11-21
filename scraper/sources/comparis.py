@@ -1,108 +1,110 @@
-"""comparis.ch - aggregator (Homegate, ImmoScout24, Newhome, Properstar, brokers...).
+"""comparis.ch - aggregator (Homegate, ImmoScout24, Newhome, Flatfox, many agencies).
 
-Server-rendered Next.js page with a clean JSON payload; 10 results per page.
-Comparis has aggressive bot protection, so we keep the request count low:
-page 0 (newest) for every municipality every day, deeper pages on a rotation.
+One bounding-box search over the whole area (flats to rent, <= max rooms, <= max rent,
+newest first, 10 per page). Comparis limits automated traffic, so we stay well below:
+the newest pages every day plus a few older pages on a rotation.
 """
 import json
 import re
+from urllib.parse import quote
 
+from ..commute import SEARCH
 from ..listing import parse_float, parse_int
-from ..regions import LARGE, MUNICIPALITIES, comparis_slug
+from ..regions import LOCALITIES
 
 NAME = "comparis"
 LABEL = "Comparis"
-BASE = "https://www.comparis.ch/immobilien/marktplatz/{slug}/wohnung/kaufen"
+URL = "https://www.comparis.ch/immobilien/result/list?requestobject={ro}&page={page}"
 DETAIL = "https://www.comparis.ch/immobilien/marktplatz/details/show/{id}"
-MAX_PAGES = 12
-MAX_REQUESTS = 70        # Comparis blocks an IP after ~60-100 fast requests: stay well below
-DELAY = (6, 11)          # seconds between requests
+DAILY_PAGES, ROTATING_PAGES, MAX_PAGES = 6, 8, 100
+DELAY = (6, 11)  # seconds between requests
+
+
+def _request_object():
+    lats = [l["lat"] for l in LOCALITIES]
+    lngs = [l["lng"] for l in LOCALITIES]
+    return {"DealType": 10, "SiteId": 0, "RootPropertyTypes": [1], "PropertyTypes": [],
+            "RoomsTo": SEARCH.get("max_rooms", 3), "PriceTo": SEARCH.get("max_rent", 2500),
+            "LowerLeftLatitude": round(min(lats) - 0.01, 3), "LowerLeftLongitude": round(min(lngs) - 0.01, 3),
+            "UpperRightLatitude": round(max(lats) + 0.01, 3), "UpperRightLongitude": round(max(lngs) + 0.01, 3),
+            "Sort": 3}  # 3 = newest first
 
 
 def _parse(html):
     m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.S)
     if not m:
         return None
-    data = json.loads(m.group(1))
-    return data.get("props", {}).get("pageProps", {}).get("initialResultData")
+    props = json.loads(m.group(1)).get("props", {}).get("pageProps", {})
+    for q in props.get("dehydratedState", {}).get("queries", []):  # layout since Oct 2026
+        data = (q.get("state") or {}).get("data")
+        if isinstance(data, dict) and "ResultItems" in data:
+            return {"items": data.get("ResultItems") or [], "pages": data.get("TotalPages") or 1}
+    old = props.get("initialResultData")  # earlier layout
+    if old:
+        return {"items": old.get("resultItems") or [], "pages": old.get("totalPages") or 1}
+    return None
+
+
+def _g(it, key):
+    return it.get(key, it.get(key[:1].lower() + key[1:]))
 
 
 def _record(it):
-    addr = it.get("Address") or []
+    addr = _g(it, "Address") or []
     zipcity = addr[-1] if addr else ""
-    street = addr[0] if len(addr) > 1 else None
     zm = re.match(r"(\d{4})\s+(.*)", zipcity)
-    ess = it.get("EssentialInformation") or []
     rooms = floor = None
-    for e in ess:
-        if "Zimmer" in e:
+    for e in _g(it, "EssentialInformation") or []:
+        if "Zimmer" in e or "pièce" in e:
             rooms = parse_float(e)
-        elif "Etage" in e or "Stock" in e:
-            floor = 0 if "Erdgeschoss" in e or "EG" in e else parse_int(e)
-        elif "Erdgeschoss" in e:
+        elif "Etage" in e or "étage" in e:
+            floor = parse_int(e)
+        elif "Erdgeschoss" in e or "rez" in e.lower():
             floor = 0
-    contact = it.get("ContactInformation") or {}
+    contact = _g(it, "ContactInformation") or {}
     vendor = contact.get("VendorInformation") or {}
-    coord = it.get("Coordinate") or {}
+    coord = _g(it, "Coordinate") or {}
     return {
         "source": NAME,
-        "source_id": it["AdId"],
-        "url": DETAIL.format(id=it["AdId"]),
-        "title": it.get("Title"),
-        "description": it.get("Remarks"),
-        "price": it.get("PriceValue") if it.get("PriceType") == 1 or it.get("PriceValue") else None,
+        "source_id": _g(it, "AdId"),
+        "url": DETAIL.format(id=_g(it, "AdId")),
+        "title": _g(it, "Title"),
+        "description": _g(it, "Remarks"),
+        "price": _g(it, "PriceValue"),
         "rooms": rooms,
-        "living_area": it.get("AreaValue"),
+        "living_area": _g(it, "AreaValue"),
         "floor": floor,
-        "street": street,
+        "street": addr[0] if len(addr) > 1 else None,
         "zip": zm.group(1) if zm else None,
         "city": zm.group(2) if zm else zipcity,
         "lat": coord.get("Latitude"),
         "lng": coord.get("Longitude"),
-        "year_built": it.get("YearOfConstruction"),
-        "year_renovated": it.get("RenovationYear"),
-        "images": (it.get("ImageUrls") or [it.get("ImageUrl")])[:6],
-        "agency": vendor.get("Name") or it.get("PartnerName"),
-        "agency_phone": vendor.get("Phone"),
-        "origin": it.get("PartnerName"),
-        "published": it.get("Date"),
-        "type_label": it.get("PropertyTypeText"),
+        "year_built": _g(it, "YearOfConstruction"),
+        "images": (_g(it, "ImageUrls") or [_g(it, "ImageUrl")])[:6],
+        "agency": vendor.get("Name") or _g(it, "PartnerName"),
+        "origin": _g(it, "PartnerName"),
+        "published": _g(it, "Date"),
     }
 
 
 def scrape(http, ctx):
-    day = ctx["day"]
-    budget = [MAX_REQUESTS]
-
-    def get(url, params=None):
-        if budget[0] <= 0:
-            return None
-        budget[0] -= 1
-        return http.get(url, params=params, allow_404=True, delay=DELAY)
-
-    # big towns every day, the ~75 small municipalities in 3 daily groups
-    order = [m for m in MUNICIPALITIES if m[0] in LARGE] + \
-            [m for k, m in enumerate(MUNICIPALITIES) if m[0] not in LARGE and (k + day) % 3 == 0]
-    for i, (name, canton, district, zips) in enumerate(order):
-        slug = comparis_slug(name)
-        r = get(BASE.format(slug=slug))
-        if r is None:
+    ro = quote(json.dumps(_request_object(), separators=(",", ":")))
+    total = DAILY_PAGES
+    pages = list(range(DAILY_PAGES))
+    for page in range(MAX_PAGES):
+        if page >= total:
+            break
+        if page not in pages:
             continue
-        data = _parse(r.text)
-        if not data:
-            continue
-        for it in data.get("resultItems") or []:
+        r = http.get(URL.format(ro=ro, page=page), allow_404=True, delay=DELAY)
+        data = _parse(r.text) if r is not None else None
+        if not data or not data["items"]:
+            break
+        if page == 0:
+            total = min(data["pages"], MAX_PAGES)
+            deeper = list(range(DAILY_PAGES, total))
+            if deeper:  # a few older pages each day, so the whole stock is refreshed regularly
+                start = (ctx["day"] * ROTATING_PAGES) % len(deeper)
+                pages += [deeper[(start + i) % len(deeper)] for i in range(min(ROTATING_PAGES, len(deeper)))]
+        for it in data["items"]:
             yield _record(it)
-        pages = min(data.get("totalPages") or 1, MAX_PAGES)
-        # deeper pages: big towns daily up to 3 pages, the rest rotates over the week
-        for p in range(1, pages):
-            if p > 2 and (p + i + day) % 4 != 0:
-                continue
-            r = get(BASE.format(slug=slug), params={"page": p})
-            if r is None:
-                break
-            data = _parse(r.text)
-            if not data or not data.get("resultItems"):
-                break
-            for it in data["resultItems"]:
-                yield _record(it)

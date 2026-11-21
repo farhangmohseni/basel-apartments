@@ -1,195 +1,112 @@
 {
-  "_comment": "Sources searched every day. 'portals' are the built-in scrapers (set enabled to false to switch one off); 'sites' are broker/developer pages watched by the generic monitor - add any page that lists objects for sale. Site fields: name, url, type (broker|developer|bank|portal), optional link_pattern (regex on the link path), optional hosts (extra allowed link domains), optional canton_hint, optional require_zip, optional strip_query. Sites that only render with JavaScript (e.g. Team Lindenberger, Kovacs, BLKB, Mobimo) cannot be monitored this way and are listed under 'Check manually' in the app.",
+  "_comment": "Sources searched every day. 'portals' are the built-in scrapers (set enabled to false to switch one off); 'sites' are property-manager / agency pages watched by the generic monitor - add any page that lists flats to rent. Site fields: name, url, type (regie|agency|city|portal), optional link_pattern (regex on the link path), optional require_zip, optional strip_query. Sites that block automated access or only render with JavaScript are listed under 'Check manually' in the app instead.",
   "portals": [
+    {
+      "key": "flatfox",
+      "name": "Flatfox",
+      "type": "portal",
+      "enabled": true,
+      "url": "https://flatfox.ch/fr/search/?east=7.18&north=47.12&offer_type=RENT&south=46.83&west=6.60"
+    },
+    {
+      "key": "immobilier_ch",
+      "name": "immobilier.ch",
+      "type": "portal",
+      "enabled": true,
+      "url": "https://www.immobilier.ch/fr/louer/appartement/neuchatel/page-1"
+    },
     {
       "key": "comparis",
       "name": "Comparis",
       "type": "aggregator",
       "enabled": true,
-      "url": "https://www.comparis.ch/immobilien/marktplatz/basel/wohnung/kaufen"
+      "url": "https://www.comparis.ch/immobilien/marktplatz/neuchatel/wohnung/mieten"
     },
     {
       "key": "realadvisor",
       "name": "RealAdvisor",
       "type": "aggregator",
       "enabled": true,
-      "url": "https://realadvisor.ch/de/kaufen/kanton-basel-stadt/wohnung"
+      "url": "https://realadvisor.ch/fr/louer/canton-neuchatel/appartement/1-piece"
     },
     {
       "key": "newhome",
       "name": "Newhome",
       "type": "portal",
       "enabled": true,
-      "url": "https://www.newhome.ch/de/kaufen/suchen/wohnung/kanton_basel-stadt/liste"
+      "url": "https://www.newhome.ch/de/mieten/suchen/wohnung/kanton_neuenburg/liste"
     },
     {
-      "key": "homegate_is24",
-      "name": "Homegate / ImmoScout24 (via alle-immobilien.ch)",
-      "type": "portal",
-      "enabled": true,
-      "url": "https://www.alle-immobilien.ch/de/kaufen/wohnung/kanton-basel-stadt"
-    },
-    {
-      "key": "flatfox",
-      "name": "Flatfox",
-      "type": "portal",
-      "enabled": true,
-      "url": "https://flatfox.ch/de/search/?offer_type=SALE&object_category=APARTMENT"
-    },
-    {
-      "key": "engelvoelkers",
-      "name": "Engel & Völkers",
-      "type": "broker",
-      "enabled": true,
-      "url": "https://www.engelvoelkers.com/ch/de/immobilien/res/kaufen/wohnung/basel-stadt"
-    },
-    {
-      "key": "tutti",
-      "name": "tutti.ch / anibis",
+      "key": "petitesannonces",
+      "name": "petitesannonces.ch",
       "type": "classifieds",
       "enabled": true,
-      "url": "https://www.tutti.ch/de/q/immobilien-wohnungen/Ak8CqcmVhbEVzdGF0ZZSRkqtsaXN0aW5nVHlwZalhcGFydG1lbnTAwMA"
+      "url": "https://www.petitesannonces.ch/r/270113"
     }
   ],
   "sites": [
     {
-      "name": "LIBA & Partner Immobilien",
-      "type": "broker",
-      "url": "https://angebot.liba-immobilien.ch/de/wohnung-kaufen",
-      "link_pattern": "/o/zu-verkaufen",
-      "strip_query": true
-    },
-    {
-      "name": "Suter Immobilien Treuhand (Binningen)",
-      "type": "broker",
-      "url": "https://suter-immo.ch/immobilien/",
+      "name": "Gérance CPCN (Caisse de pension NE)",
+      "type": "regie",
+      "url": "https://gerance.cpcn.ch/",
       "link_pattern": "/immobilien/\\d+"
     },
     {
-      "name": "Immoline Basel",
-      "type": "broker",
-      "url": "https://www.immoline.ch/angebote/index.php?rubrik=1"
+      "name": "Gérance Charles-Berset",
+      "type": "regie",
+      "url": "https://berset-gerance.ch/locations/",
+      "link_pattern": "/locations/appartements/"
     },
     {
-      "name": "Immobilien-Team Daniel Schweizer",
-      "type": "broker",
-      "url": "https://immoteam-schweizer.ch/immobilien",
+      "name": "Gérance Métropole (La Chaux-de-Fonds)",
+      "type": "regie",
+      "url": "https://www.gerance-metropole.ch/a-louer/a-louer"
+    },
+    {
+      "name": "GHB Gérance",
+      "type": "regie",
+      "url": "https://www.ghb-gerance.ch/properties_state/neuchatel/",
+      "link_pattern": "/properties/"
+    },
+    {
+      "name": "RVK SA",
+      "type": "regie",
+      "url": "https://www.rvksa.ch/",
+      "link_pattern": "/location/appartement/"
+    },
+    {
+      "name": "GPC courtage & gestion",
+      "type": "regie",
+      "url": "https://www.gpc.ch/",
+      "link_pattern": "/annonces/\\d+"
+    },
+    {
+      "name": "Régie Jouval",
+      "type": "regie",
+      "url": "https://jouval.ch/",
+      "link_pattern": "/listings/"
+    },
+    {
+      "name": "BZ Immobilier",
+      "type": "regie",
+      "url": "https://www.bzimmobilier.ch/biens/louer/"
+    },
+    {
+      "name": "Fidimmobil",
+      "type": "regie",
+      "url": "https://www.fidimmobil.ch/fr/louer.php",
+      "link_pattern": "location"
+    },
+    {
+      "name": "Optigestion",
+      "type": "regie",
+      "url": "https://optigestion.ch/immobilien",
       "link_pattern": "/immobilien/\\d+"
     },
     {
-      "name": "MN Immobilien",
-      "type": "broker",
-      "url": "https://www.mn-immobilien.ch/zuverkaufen",
-      "link_pattern": "/o/zu-verkaufen",
-      "strip_query": true
-    },
-    {
-      "name": "Woodtli Immobilien-Treuhand (Sissach)",
-      "type": "broker",
-      "url": "https://www.wooimmo.ch/angebote/"
-    },
-    {
-      "name": "Livendo Immobilien (Liestal)",
-      "type": "broker",
-      "url": "https://livendo-immobilien.ch/immobilien/",
-      "link_pattern": "/immobilien/\\d+"
-    },
-    {
-      "name": "Immoanker",
-      "type": "broker",
-      "url": "https://immoanker.ch/immobilien/",
-      "link_pattern": "/immobilien/\\d+",
-      "require_zip": true
-    },
-    {
-      "name": "ImmoMensch (Binningen)",
-      "type": "broker",
-      "url": "https://829.immomigsa.ch/de",
-      "link_pattern": "/o/zu-verkaufen",
-      "strip_query": true
-    },
-    {
-      "name": "Homevisit",
-      "type": "broker",
-      "url": "https://angebot.home-visit.ch/de/objects-sale",
-      "link_pattern": "/o/zu-verkaufen",
-      "strip_query": true,
-      "require_zip": true
-    },
-    {
-      "name": "Blauenstein Immobilien (Riehen)",
-      "type": "broker",
-      "url": "https://www.blauenstein-immobilien.ch/de/ol/39922",
-      "link_pattern": "/o/zu-verkaufen",
-      "strip_query": true,
-      "require_zip": true
-    },
-    {
-      "name": "Avenaris Immobilien",
-      "type": "broker",
-      "url": "https://immo.avenaris.com/de/objects-sale",
-      "link_pattern": "/o/zu-verkaufen",
-      "strip_query": true,
-      "require_zip": true
-    },
-    {
-      "name": "Immo Family",
-      "type": "broker",
-      "url": "https://immofamily.immomigsa.ch/de",
-      "link_pattern": "/o/zu-verkaufen",
-      "strip_query": true
-    },
-    {
-      "name": "CK Solutions",
-      "type": "broker",
-      "url": "https://casaframe.ch/de/publisher/MKUfTtPT1k3uLDJK85OZCtLD3ovsv8YJ/"
-    },
-    {
-      "name": "Futuro Immobilien - Neubauprojekte",
-      "type": "developer",
-      "url": "https://futuro-immobilien.ch/de/neubauprojekte"
-    },
-    {
-      "name": "Raiffeisen Immomakler - Basel-Stadt",
-      "type": "bank",
-      "url": "https://immo.raiffeisen.ch/immobilien-kaufen/wohnung/kanton-basel-stadt/"
-    },
-    {
-      "name": "Raiffeisen Immomakler - Basel-Landschaft",
-      "type": "bank",
-      "url": "https://immo.raiffeisen.ch/immobilien-kaufen/wohnung/kanton-basel-landschaft/"
-    },
-    {
-      "name": "Neubauprojekte.ch - Basel-Stadt",
-      "type": "portal",
-      "url": "https://www.neubauprojekte.ch/tag/basel-stadt/"
-    },
-    {
-      "name": "Neubauprojekte.ch - Basel-Landschaft",
-      "type": "portal",
-      "url": "https://www.neubauprojekte.ch/kaufen/?mainCategory=apartment_and_house&offerType=sale&orderBy=created&order=desc&page=1&states=Basel-Landschaft&type=all"
-    },
-    {
-      "name": "immobilier.ch - Basel-Stadt",
-      "type": "portal",
-      "url": "https://www.immobilier.ch/de/kaufen/wohnung/basel-stadt",
-      "link_pattern": "/de/kaufen/wohnung/basel-(stadt|landschaft)/[^/?]+/[^/?]+"
-    },
-    {
-      "name": "Acheteur.ch (Neho) - Basel-Stadt",
-      "type": "portal",
-      "url": "https://acheteur.ch/de/wohnung-kaufen/basel-stadt/kanton-basel-stadt"
-    },
-    {
-      "name": "Acheteur.ch (Neho) - Basel-Landschaft",
-      "type": "portal",
-      "url": "https://acheteur.ch/de/wohnung-kaufen/basel-landschaft"
-    },
-    {
-      "name": "immobilier.ch - Basel-Landschaft",
-      "type": "portal",
-      "url": "https://www.immobilier.ch/de/kaufen/wohnung/basel-landschaft",
-      "link_pattern": "/de/kaufen/wohnung/basel-(stadt|landschaft)/[^/?]+/[^/?]+"
+      "name": "Régie Duboux",
+      "type": "regie",
+      "url": "https://location.regieduboux.ch/fr"
     }
   ]
 }

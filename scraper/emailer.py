@@ -1,7 +1,7 @@
 """Daily e-mail digest (HTML + plain text) sent through SMTP (Gmail by default).
 
 Environment variables (set as GitHub Actions secrets):
-    SMTP_USER       sender address, e.g. basel.apartment.alerts@gmail.com
+    SMTP_USER       sender address
     SMTP_PASSWORD   Gmail *App Password* (16 chars) of that account
     EMAIL_TO        comma separated recipients
     APP_URL         public URL of the web app (GitHub Pages)
@@ -19,14 +19,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FILTERS = ROOT / "config" / "email_filters.json"
+SEARCH = json.loads((ROOT / "config" / "search.json").read_text(encoding="utf-8"))
+WORK = SEARCH["workplace"].get("short", "work")
 
 FEATURE_LABELS = {
-    "balcony": "Balcony", "terrace": "Terrace", "garden": "Garden", "lift": "Elevator", "parking": "Parking",
-    "new_build": "New build", "attic": "Attic", "maisonette": "Maisonette", "view": "View",
-    "minergie": "Minergie/eco", "renovated": "Renovated", "quiet": "Quiet", "fireplace": "Fireplace",
-    "leasehold": "⚠ Leasehold (Baurecht)", "investment_rented": "⚠ rented out", "auction": "⚠ auction",
-    "reserved": "⚠ reserved",
+    "furnished": "Furnished", "balcony": "Balcony", "terrace": "Terrace", "garden": "Garden", "lift": "Lift",
+    "parking": "Parking", "cellar": "Cellar", "own_laundry": "Own washing machine", "dishwasher": "Dishwasher",
+    "view": "View", "lake": "Lake", "quiet": "Quiet", "renovated": "Renovated", "new_build": "New build",
+    "near_transport": "Near public transport", "pets": "Pets ok",
 }
+WARNING_LABELS = {"reserved": "already reserved", "temporary": "temporary / sublet", "shared_flat": "shared flat", "students_only": "students only",
+                  "seniors_only": "seniors only", "subsidized": "subsidised (conditions)", "swap": "flat swap"}
 
 
 def load_filters():
@@ -35,8 +38,32 @@ def load_filters():
     return {}
 
 
+def _get(f, *keys):
+    for k in keys:
+        if f.get(k) not in (None, ""):
+            return f[k]
+    return None
+
+
+def commute_ok(p, f):
+    car_max, pt_max = _get(f, "max_car_min"), _get(f, "max_pt_min")
+    if car_max is None and pt_max is None:
+        return True
+    car, pt = p.get("car_min"), p.get("pt_min")
+    car_ok = car_max is None or (car is not None and car <= car_max)
+    pt_ok = pt_max is None or (pt is not None and pt <= pt_max)
+    mode = f.get("commute_mode") or "either"
+    if mode == "car":
+        return car_ok
+    if mode == "pt":
+        return pt_ok
+    if mode == "both":
+        return car_ok and pt_ok
+    return (car_max is not None and car_ok) or (pt_max is not None and pt_ok)  # either
+
+
 def matches(p, f):
-    """Same semantics as the web app's filter (docs/app.js -> matchesEmailFilter)."""
+    """Same semantics as the web app's 'Copy as e-mail filter' (docs/app.js -> emailFilterJson)."""
     def rng(val, lo, hi, allow_missing=True):
         if val is None:
             return allow_missing
@@ -47,24 +74,30 @@ def matches(p, f):
         return True
 
     miss = f.get("include_missing_values", True)
-    if not rng(p.get("price"), f.get("price_min"), f.get("price_max"), miss):
+    if not rng(p.get("price"), _get(f, "rent_min", "price_min"), _get(f, "rent_max", "price_max"), miss):
         return False
     if not rng(p.get("rooms"), f.get("rooms_min"), f.get("rooms_max"), miss):
         return False
     if not rng(p.get("living_area"), f.get("area_min"), f.get("area_max"), miss):
         return False
-    if not rng(p.get("price_per_m2"), None, f.get("price_per_m2_max"), True):
+    if not rng(p.get("price_per_m2"), None, _get(f, "rent_per_m2_max", "price_per_m2_max"), True):
         return False
-    if not rng(p.get("year_built"), f.get("year_built_min"), None, True):
+    if not commute_ok(p, f):
         return False
     if f.get("cantons") and p.get("canton") not in f["cantons"]:
-        if not (p.get("canton") == "?" and f.get("include_unknown_location", True)):
-            return False
-    if f.get("districts") and p.get("district") not in f["districts"] and p.get("canton") != "?":
         return False
-    if f.get("municipalities") and p.get("municipality") not in f["municipalities"] and p.get("canton") != "?":
+    places = f.get("localities") or f.get("municipalities") or []
+    if places and p.get("municipality") not in places and str(p.get("zip")) not in places:
+        return False
+    if f.get("types") and (p.get("property_type") or "apartment") not in f["types"]:
+        return False
+    if (p.get("property_type") or "apartment") in f.get("exclude_types", []):
         return False
     feats = p.get("features") or {}
+    if f.get("furnished") == "yes" and not feats.get("furnished"):
+        return False
+    if f.get("furnished") == "no" and feats.get("furnished"):
+        return False
     for k in f.get("require_features", []):
         if not feats.get(k):
             return False
@@ -75,34 +108,53 @@ def matches(p, f):
     for kw in f.get("exclude_keywords", []):
         if kw.lower() in text:
             return False
-    if f.get("include_keywords_any"):
-        if not any(kw.lower() in text for kw in f["include_keywords_any"]):
-            return False
-    if p.get("property_type") in f.get("exclude_types", []):
+    if f.get("include_keywords_any") and not any(kw.lower() in text for kw in f["include_keywords_any"]):
         return False
     return True
 
 
 def chf(v):
-    return "Price on request" if not v else "CHF " + f"{int(v):,}".replace(",", "’")
+    return "rent on request" if not v else "CHF " + f"{int(round(v)):,}".replace(",", "’")
+
+
+def rent_html(p):
+    if not p.get("price"):
+        return "rent on request"
+    detail = ""
+    if p.get("rent_net") and p.get("charges"):
+        detail = f" <span style='font-size:12px;color:#6b7280;font-weight:normal'>({chf(p['rent_net'])} + {int(p['charges'])} charges)</span>"
+    return f"{chf(p['price'])}<span style='font-size:13px'> / month</span>{detail}"
+
+
+def commute_text(p):
+    parts = []
+    approx = "" if p.get("commute_exact") else "≈"
+    if p.get("car_min") is not None:
+        parts.append(f"🚗 {approx}{round(p['car_min'])} min" + (f" ({p['car_km']:g} km)" if p.get("car_km") else ""))
+    if p.get("pt_min") is not None:
+        ch = p.get("pt_changes")
+        parts.append(f"🚆 {'' if p.get('pt_exact') else '≈'}{p['pt_min']} min" + (f", {ch} change{'s' if ch != 1 else ''}" if ch else ", direct"))
+    return (" · ".join(parts) + f" to {WORK}") if parts else ""
 
 
 def _card_html(p, extra=""):
     img = (p.get("images") or [None])[0]
     facts = []
-    if p.get("rooms"):
+    if p.get("property_type") == "studio":
+        facts.append("Studio")
+    elif p.get("property_type") == "room":
+        facts.append("Room")
+    if p.get("rooms") and p.get("property_type") not in ("studio", "room"):
         facts.append(f"{p['rooms']:g} rooms")
     if p.get("living_area"):
         facts.append(f"{p['living_area']} m²")
-    if p.get("price_per_m2"):
-        facts.append(f"{chf(p['price_per_m2'])}/m²")
     if p.get("floor") is not None:
         facts.append("ground floor" if p["floor"] == 0 else f"floor {p['floor']}")
-    if p.get("year_built"):
-        facts.append(f"built {p['year_built']}")
+    if p.get("available_from"):
+        facts.append(f"available {p['available_from']}")
     feats = [FEATURE_LABELS[k] for k in FEATURE_LABELS if (p.get("features") or {}).get(k)]
-    loc = " ".join(x for x in [p.get("street"), p.get("zip"), p.get("municipality")] if x)
-    price = "see ad" if p.get("numbers_hidden") else chf(p.get("price"))
+    warns = [WARNING_LABELS[k] for k in WARNING_LABELS if (p.get("features") or {}).get(k)]
+    loc = ", ".join(x for x in [p.get("street"), " ".join(x for x in (p.get("zip"), p.get("municipality")) if x)] if x)
     links = " · ".join(f'<a href="{html.escape(l["url"])}" style="color:#1d4ed8">{html.escape(l["label"])}</a>'
                        for l in (p.get("links") or [])[:5])
     img_html = (f'<td width="150" valign="top" style="padding-right:12px"><a href="{html.escape(p["url"])}">'
@@ -111,11 +163,13 @@ def _card_html(p, extra=""):
     return f"""
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;margin:0 0 12px 0;padding:10px">
 <tr>{img_html}<td valign="top" style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#111827">
-<div style="font-size:16px;font-weight:bold;margin-bottom:4px"><a href="{html.escape(p['url'])}" style="color:#111827;text-decoration:none">{html.escape(p.get('title') or 'Apartment')}</a></div>
-<div style="font-size:17px;font-weight:bold;color:#047857">{price} {extra}</div>
-<div style="color:#374151;margin:4px 0">{' · '.join(facts)}</div>
-<div style="color:#6b7280">{html.escape(loc)} {('(' + p['canton'] + ')') if p.get('canton') and p['canton'] != '?' else ''}</div>
+<div style="font-size:16px;font-weight:bold;margin-bottom:4px"><a href="{html.escape(p['url'])}" style="color:#111827;text-decoration:none">{html.escape(p.get('title') or 'Flat')}</a></div>
+<div style="font-size:17px;font-weight:bold;color:#047857">{rent_html(p)} {extra}</div>
+<div style="color:#1e3a8a;margin:4px 0;font-weight:bold">{html.escape(commute_text(p))}</div>
+<div style="color:#374151;margin:2px 0">{' · '.join(facts)}</div>
+<div style="color:#6b7280">📍 {html.escape(loc)}</div>
 <div style="color:#6b7280;font-size:12px;margin-top:4px">{' · '.join(feats)}</div>
+{f'<div style="color:#b45309;font-size:12px">⚠ {" · ".join(warns)}</div>' if warns else ''}
 <div style="font-size:12px;margin-top:6px">{links}</div>
 </td></tr></table>"""
 
@@ -124,8 +178,8 @@ def build(state, new_ids, price_changes, run_day):
     f = load_filters()
     app_url = os.environ.get("APP_URL", "").rstrip("/")
     props = {p["id"]: p for p in state["properties"]}
-    new = [props[i] for i in new_ids if i in props]
-    new_match = [p for p in new if matches(p, f)]
+    new = [props[i] for i in new_ids if i in props and props[i].get("active")]
+    new_match = sorted((p for p in new if matches(p, f)), key=lambda p: (p.get("price") or 99999))
     new_other = [p for p in new if not matches(p, f)]
     drops = [(props[i], old, newp) for i, old, newp in price_changes if i in props and newp < old and matches(props[i], f)]
     first_run = not state.get("runs") or len(state["runs"]) <= 1
@@ -133,29 +187,27 @@ def build(state, new_ids, price_changes, run_day):
     active_match = [p for p in active if matches(p, f)]
 
     parts = [f"""<div style="font-family:Arial,Helvetica,sans-serif;max-width:720px;margin:auto;color:#111827">
-<h2 style="margin-bottom:4px">🏠 Basel apartment search – {run_day}</h2>
-<p style="color:#4b5563;margin-top:0">{len(new_match)} new matching ads · {len(drops)} price reductions ·
-{len(active_match)} of {len(active)} active ads in BS/BL match your criteria
+<h2 style="margin-bottom:4px">🔑 Studio search near {html.escape(SEARCH['workplace']['name'])} – {run_day}</h2>
+<p style="color:#4b5563;margin-top:0">{len(new_match)} new matching flats · {len(drops)} rent reductions ·
+{len(active_match)} of {len(active)} flats for rent in the area match your criteria
 {f' · <a href="{app_url}">Open the app</a>' if app_url else ''}</p>"""]
     if first_run:
         parts.append(f"""<p style="background:#eff6ff;padding:10px;border-radius:6px">First run: all {len(active)}
-current ads have been collected. From tomorrow on this e-mail only contains <b>new</b> ads and price reductions.
-Below are the most recent matching ads.</p>""")
-        new_match = sorted(active_match, key=lambda p: ((p.get("published") or "")[:10], bool(p.get("images")),
-                                                        bool(p.get("price"))), reverse=True)[:25]
+flats currently for rent within {SEARCH.get('max_car_minutes', 25)} min by car of {html.escape(WORK)} have been collected.
+From now on this e-mail only contains <b>new</b> flats and rent reductions. Below: the cheapest matching flats today.</p>""")
+        new_match = sorted(active_match, key=lambda p: (p.get("price") or 99999))[:25]
     if new_match:
-        parts.append(f"<h3>✨ New ads ({len(new_match)})</h3>")
+        parts.append(f"<h3>✨ {'Cheapest matching flats' if first_run else 'New flats'} ({len(new_match)})</h3>")
         parts += [_card_html(p) for p in new_match[:60]]
     elif not first_run:
-        parts.append("<p>No new ads matching your criteria today.</p>")
+        parts.append("<p>No new flats matching your criteria today.</p>")
     if drops:
-        parts.append(f"<h3>📉 Price reductions ({len(drops)})</h3>")
+        parts.append(f"<h3>📉 Rent reductions ({len(drops)})</h3>")
         parts += [_card_html(p, f'<span style="color:#b91c1c;font-size:13px"><s>{chf(old)}</s> −{round((old - newp) / old * 100)}%</span>')
                   for p, old, newp in drops[:30]]
     if new_other:
-        parts.append(f"""<p style="color:#6b7280">Plus {len(new_other)} more new ads outside your filters
+        parts.append(f"""<p style="color:#6b7280">Plus {len(new_other)} more new flats outside your filters
 {f'(<a href="{app_url}#new">see them in the app</a>)' if app_url else ''}.</p>""")
-    # source health
     rows = []
     for key, s in sorted((state.get("sources") or {}).items(), key=lambda kv: (kv[1].get("kind") != "portal", kv[0])):
         ok = s.get("status") == "ok"
@@ -168,20 +220,27 @@ Below are the most recent matching ads.</p>""")
     web_ok = sum(1 for s in (state.get("sources") or {}).values() if s.get("kind") != "portal" and s.get("status") == "ok")
     parts.append(f"""<h4 style="margin-top:24px;color:#6b7280">Source status</h4>
 <table style="font-size:12px;color:#374151;border-collapse:collapse">{''.join(rows)}</table>
-<p style="font-size:12px;color:#6b7280">+ {web_ok} broker / developer websites monitored without problems.
-To change the criteria: in the app use “Copy as e-mail filter” and paste it into config/email_filters.json.</p></div>""")
+<p style="font-size:12px;color:#6b7280">+ {web_ok} property-manager websites checked without problems.
+Homegate, ImmoScout24 and anibis block automated searches: their ads mostly arrive via Comparis / RealAdvisor;
+for full coverage create their own e-mail alerts (links in the app under Sources).<br>
+To change the criteria of this e-mail: in the app set the filters, “Copy as e-mail filter”, paste into config/email_filters.json.</p></div>""")
     html_body = "\n".join(parts)
 
-    lines = [f"Basel apartment search – {run_day}", f"{len(new_match)} new matching ads, {len(drops)} price reductions", ""]
+    lines = [f"Studio search near {SEARCH['workplace']['name']} – {run_day}",
+             f"{len(new_match)} new matching flats, {len(drops)} rent reductions", ""]
     for p in new_match[:60]:
-        lines.append(f"- {p.get('title')} | {chf(p.get('price'))} | {p.get('rooms') or '?'} rooms | "
-                     f"{p.get('living_area') or '?'} m² | {p.get('zip') or ''} {p.get('municipality') or ''}\n  {p['url']}")
+        lines.append(f"- {p.get('title')} | {chf(p.get('price'))}/month | {p.get('rooms') or '?'} rooms | "
+                     f"{p.get('living_area') or '?'} m² | {p.get('zip') or ''} {p.get('municipality') or ''} | "
+                     f"{commute_text(p)}\n  {p['url']}")
     for p, old, newp in drops[:30]:
-        lines.append(f"- PRICE ↓ {p.get('title')} | {chf(old)} -> {chf(newp)}\n  {p['url']}")
+        lines.append(f"- RENT ↓ {p.get('title')} | {chf(old)} -> {chf(newp)}\n  {p['url']}")
     if app_url:
         lines += ["", f"App: {app_url}"]
-    subject = (f"🏠 {len(new_match)} new apartments" + (f", {len(drops)} price cuts" if drops else "")
-               + f" – Basel {run_day}") if not first_run else f"🏠 Basel apartment search started – {len(active_match)} matching ads"
+    if first_run:
+        subject = f"🔑 Studio search started – {len(active_match)} matching flats near {WORK}"
+    else:
+        subject = f"🔑 {len(new_match)} new flat{'s' if len(new_match) != 1 else ''} near {WORK}" + \
+                  (f", {len(drops)} rent cuts" if drops else "") + f" – {run_day}"
     return subject, html_body, "\n".join(lines)
 
 
@@ -201,7 +260,7 @@ def send_daily(state, new_ids, price_changes, run_day):
         return
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = f"Basel Apartment Finder <{user}>"
+    msg["From"] = f"Studio Finder Neuchâtel <{user}>"
     msg["To"] = ", ".join(to)
     msg.set_content(text_body)
     msg.add_alternative(html_body, subtype="html")

@@ -13,23 +13,29 @@ import time
 import traceback
 from pathlib import Path
 
-from . import emailer
+from . import commute, emailer
 from .http import Blocked, Http
 from .listing import finalize, fingerprint, identical, make_id, similar
-from .regions import slugify
-from .sources import comparis, engelvoelkers, flatfox, generic, newhome, realadvisor, smg_satellite, tutti
+from .regions import LOCALITIES, WORKPLACE, ZIP_INFO, slugify
+from .sources import comparis, flatfox, generic, immobilier_ch, newhome, petitesannonces, realadvisor
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "docs" / "data" / "listings.json"
-STALE_DAYS = 10        # not seen for this long -> marked inactive (probably sold / removed)
+STALE_DAYS = 10        # default: not seen for this long -> marked inactive (probably rented / removed)
+# sources that only show their newest ads (or rotate deeper pages) get a longer window before an ad counts as gone
+SOURCE_STALE_DAYS = {"flatfox": 5, "newhome": 5, "web": 7, "comparis": 14, "immobilier_ch": 14,
+                     "petitesannonces": 21, "realadvisor": 30}
 DROP_AFTER_DAYS = 120  # inactive records are deleted after this long
 
-STRUCTURED = [comparis, realadvisor, newhome, flatfox, engelvoelkers, tutti, smg_satellite]
+STRUCTURED = [flatfox, immobilier_ch, comparis, realadvisor, newhome, petitesannonces]
 # which source's numbers we trust most when the same flat is on several portals
-PRIORITY = ["comparis", "realadvisor", "newhome", "flatfox", "engelvoelkers", "web", "tutti", "homegate_is24"]
-FIELDS = ["title", "description", "price", "rooms", "living_area", "usable_area", "price_per_m2", "floor",
+PRIORITY = ["flatfox", "newhome", "immobilier_ch", "comparis", "realadvisor", "web", "petitesannonces"]
+FIELDS = ["title", "description", "price", "rent_net", "charges", "rooms", "living_area", "price_per_m2", "floor",
           "bathrooms", "street", "zip", "municipality", "canton", "district", "lat", "lng", "year_built",
-          "year_renovated", "agency", "agency_phone", "property_type", "type_label", "private_seller", "published"]
+          "year_renovated", "agency", "property_type", "private_seller", "published", "available_from"]
+
+STICKY = ("zip", "municipality", "canton", "district", "street", "price", "rent_net", "charges", "rooms", "living_area",
+          "lat", "lng", "description", "images", "available_from", "year_built")
 
 log = logging.getLogger("run")
 
@@ -69,7 +75,7 @@ def run_generic(http, ctx):
         t0 = time.time()
         recs, status = [], "ok"
         try:
-            recs = list(generic.scrape_site(http, site))
+            recs = list(generic.scrape_site(http, site, ctx.get("known_urls", frozenset())))
             if not recs:
                 status = "no ads found"
         except Blocked as e:
@@ -81,9 +87,9 @@ def run_generic(http, ctx):
     return results
 
 
-def scrape_all(only=None):
+def scrape_all(only=None, known_urls=frozenset()):
     http = Http()
-    ctx = {"day": dt.date.today().toordinal()}
+    ctx = {"day": dt.date.today().toordinal(), "known_urls": known_urls}
     out = []
     with cf.ThreadPoolExecutor(max_workers=8) as ex:
         portals = {p["key"]: p for p in generic.load_config().get("portals", [])}
@@ -165,7 +171,8 @@ def merge(state, results, run_day):
         if p.get("zip"):
             by_zip.setdefault(str(p["zip"]), set()).add(p["id"])
 
-    known_sources = set(state.get("sources", {}).keys())
+    # a source counts as known only once it has delivered ads: its first real delivery is a baseline, not "new"
+    known_sources = {k for k, v in state.get("sources", {}).items() if v.get("ever_ok", v.get("count", 0) > 0)}
     # per-ad prices before this run: a price change only counts when the *same ad* changes its price,
     # not when another portal with a slightly different price becomes the displayed source
     before = {lk: l["data"].get("price") for p in props.values() for lk, l in p["listings"].items()}
@@ -201,7 +208,7 @@ def merge(state, results, run_day):
                         best, pid = sc, c
             listing = {
                 "source": src,
-                "source_label": f"{res['label']}" + (f" ({rec['origin']})" if rec.get("origin") and src != "homegate_is24" else ""),
+                "source_label": f"{res['label']}" + (f" ({rec['origin']})" if rec.get("origin") else ""),
                 "url": rec["url"],
                 "last_seen": run_day,
                 "data": {k: v for k, v in rec.items() if k not in ("source", "source_id", "url")},
@@ -210,6 +217,10 @@ def merge(state, results, run_day):
                 p = props[pid]
                 old = p["listings"].get(lkey)
                 listing["first_seen"] = old["first_seen"] if old else run_day
+                if old:  # keep details learned earlier (e.g. from the ad page) that today's list page lacks
+                    for k in STICKY:
+                        if listing["data"].get(k) in (None, "", []) and old["data"].get(k) not in (None, "", []):
+                            listing["data"][k] = old["data"][k]
                 p["listings"][lkey] = listing
             else:
                 pid = lkey
@@ -282,7 +293,8 @@ def merge(state, results, run_day):
     for pid in list(props):
         p = props[pid]
         last = dt.date.fromisoformat(p["last_seen"])
-        p["active"] = (d_today - last).days <= STALE_DAYS
+        p["active"] = any((d_today - dt.date.fromisoformat(l["last_seen"])).days <= SOURCE_STALE_DAYS.get(l["source"], STALE_DAYS)
+                          for l in p["listings"].values())
         if not p["active"] and not p.get("removed_on"):
             p["removed_on"] = run_day
         if p["active"]:
@@ -298,10 +310,14 @@ def merge(state, results, run_day):
     state["properties"] = sorted(props.values(), key=lambda p: (p["first_seen"], p["id"]), reverse=True)
     for res in results:
         prev = state.setdefault("sources", {}).get(res["key"], {})
+        status = res["status"]
+        if status == "ok" and not res["recs"] and res["kind"] == "portal" and (prev.get("count") or 0) >= 5:
+            status = "warning: 0 ads today (site changed or blocked?)"  # silent failure, never report "ok"
         state["sources"][res["key"]] = {
             "label": res["label"], "kind": res["kind"], "url": res.get("url"),
-            "status": res["status"], "count": len(res["recs"]), "seconds": res["secs"],
-            "last_ok": run_day if res["status"] == "ok" else prev.get("last_ok"),
+            "status": status, "count": len(res["recs"]), "seconds": res["secs"],
+            "last_ok": run_day if status == "ok" else prev.get("last_ok"),
+            "ever_ok": bool(prev.get("ever_ok") or res["recs"]),
         }
     return new_ids, price_changes
 
@@ -331,8 +347,10 @@ def _dump_lines(obj, list_key):
 def save(state):
     DATA.parent.mkdir(parents=True, exist_ok=True)
     DATA.write_text(_dump_lines(state, "properties"), encoding="utf-8")
-    pub = {"generated": dt.datetime.now().isoformat(timespec="minutes"), "sources": state["sources"],
-           "runs": state.get("runs", [])[-30:], "properties": public_view(state)}
+    pub = {"generated": dt.datetime.now().isoformat(timespec="minutes"), "workplace": WORKPLACE,
+           "localities": [{k: l.get(k) for k in ("zip", "name", "canton", "district", "lat", "lng", "car_min", "car_km",
+                                                  "pt_min", "pt_changes")} for l in LOCALITIES],
+           "sources": state["sources"], "runs": state.get("runs", [])[-30:], "properties": public_view(state)}
     (DATA.parent / "public.json").write_text(_dump_lines(pub, "properties"), encoding="utf-8")
 
 
@@ -341,7 +359,8 @@ def main():
     ap.add_argument("--no-email", action="store_true")
     ap.add_argument("--save-cache", action="store_true", help="store raw scrape results in out/scrape_cache.json")
     ap.add_argument("--from-cache", action="store_true", help="skip scraping, re-use out/scrape_cache.json (development)")
-    ap.add_argument("--only", help="comma separated source keys (comparis,realadvisor,newhome,flatfox,engelvoelkers,tutti,homegate_is24,web)")
+    ap.add_argument("--only", help="comma separated source keys (flatfox,immobilier_ch,comparis,realadvisor,newhome,petitesannonces,web)")
+    ap.add_argument("--max-pt-lookups", type=int, default=100, help="public-transport lookups per run (search.ch limit)")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -351,11 +370,14 @@ def main():
     if args.from_cache:
         results = json.loads(cache.read_text(encoding="utf-8"))
     else:
-        results = scrape_all(set(args.only.split(",")) if args.only else None)
+        known = frozenset(l["url"] for p in state["properties"] for l in p["listings"].values())
+        results = scrape_all(set(args.only.split(",")) if args.only else None, known)
     if args.save_cache:
         cache.parent.mkdir(exist_ok=True)
         cache.write_text(json.dumps(results, ensure_ascii=False), encoding="utf-8")
     new_ids, price_changes = merge(state, results, run_day)
+    n_car, n_pt = commute.enrich(state["properties"], ZIP_INFO, max_pt_lookups=args.max_pt_lookups)
+    log.info("commute: %d new car routes, %d new public-transport routes", n_car, n_pt)
     active = sum(1 for p in state["properties"] if p["active"])
     state.setdefault("runs", []).append({"day": run_day, "new": len(new_ids), "price_changes": len(price_changes),
                                          "active": active})

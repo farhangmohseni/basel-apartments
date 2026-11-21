@@ -1,21 +1,24 @@
-"""realadvisor.ch - aggregator of the big Swiss portals + broker feeds (IDX, Immomig, Flatfox...).
+"""realadvisor.ch - aggregator of the big Swiss portals and agency feeds.
 
-Listings are embedded in the Next.js RSC "flight" payload (self.__next_f.push).
-Each page shows the 24 newest listings; pagination is not server-rendered, so
-large municipalities are additionally split by room count.
+Server-rendered pages (React Router) that embed the listings as JSON in a
+`data-island="analytics" data-props="..."` attribute, ~24 newest ads per page (deeper pages are
+not reliably served). So we read many small slices: the canton per room segment, every town of
+the area, and room segments for the bigger towns - each new ad is caught while it is on top.
 """
-import base64
+import html as htmllib
 import json
 import re
 
+from bs4 import BeautifulSoup
 from hashids import Hashids
 
-from ..regions import LARGE, MUNICIPALITIES, realadvisor_slug
+from ..regions import LOCALITIES, slugify
 
 NAME = "realadvisor"
 LABEL = "RealAdvisor"
-BASE = "https://realadvisor.ch/de/kaufen/{slug}/wohnung{suffix}"
-ROOM_SPLITS = ["/1-zimmer", "/2-zimmer", "/3-zimmer", "/4-zimmer", "/5-zimmer", "/uber-6-zimmer"]
+BASE = "https://realadvisor.ch/fr/louer/{place}/appartement{segment}"
+DETAIL = "https://realadvisor.ch/fr/louer/appartement/{code}"
+SEGMENTS = ["/1-piece", "/2-pieces", "/3-pieces"]
 _hash = Hashids(salt="honey doesn't spoil", min_length=8, alphabet="0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 
@@ -24,95 +27,91 @@ def _code(listing_id):
     return f"{c[:4]}-{c[4:]}"
 
 
-def _image(img):
-    raw = f"https://storage.googleapis.com/{img.get('bucket_name', 'aggregator-images')}/{img['file_name']}"
-    enc = base64.b64encode(raw.encode()).decode()
-    return f"https://img.realadvisor.ch/_/rs:fill:750:422:1:0/q:70/{enc}.webp"
+def _parse(page_html):
+    """-> (listings, total_count)"""
+    m = re.search(r'data-island="analytics" data-props="([^"]*)"', page_html)
+    listings = json.loads(htmllib.unescape(m.group(1))).get("listings", []) if m else []
+    t = re.search(r"<title>[^<]*?([\d'’]+)\s+(?:annonces|offres|biens)", page_html)
+    total = int(re.sub(r"\D", "", t.group(1))) if t else len(listings)
+    images = {}
+    if listings:
+        soup = BeautifulSoup(page_html, "lxml")
+        for a in soup.find_all("a", href=re.compile(r"-[A-Z0-9]{4}-[A-Z0-9]{4}$")):
+            code = a["href"][-9:]
+            img = a.find("img")
+            if img and code not in images:
+                src = img.get("src") or (img.get("srcset") or img.get("srcSet") or "").split(" ")[0]
+                if src and not src.startswith("data:"):
+                    images[code] = src
+    return listings, total, images
 
 
-def _listings(html):
-    chunks = re.findall(r"self\.__next_f\.push\((\[.*?\])\)</script>", html, re.S)
-    flight = ""
-    for c in chunks:
-        try:
-            arr = json.loads(c)
-        except ValueError:
-            continue
-        if len(arr) > 1 and isinstance(arr[1], str):
-            flight += arr[1]
-    dec = json.JSONDecoder()
-    seen = set()
-    for m in re.finditer(r'"listing":\{', flight):
-        try:
-            obj, _ = dec.raw_decode(flight, m.start() + len('"listing":'))
-        except ValueError:
-            continue
-        if obj.get("id") in seen or obj.get("offer_type") != "buy":
-            continue
-        seen.add(obj.get("id"))
-        desc = obj.get("description")
-        if isinstance(desc, str) and desc.startswith("$"):
-            # RSC back-reference ("$89") -> resolve "89:T...,<text>" chunk
-            ref = desc[1:]
-            mm = re.search(r"(?:^|\n)" + re.escape(ref) + r":T[0-9a-f]+,", flight)
-            desc = flight[mm.end(): mm.end() + 4000] if mm else None
-        obj["_description"] = desc
-        yield obj
-
-
-def _total(html):
-    m = re.search(r"stehen [^.]*? (\d+) Wohnungen? zum Verkauf", html)
-    return int(m.group(1)) if m else 0
-
-
-def _record(o):
-    title = o.get("title") or (o.get("translated_titles") or {}).get("de")
-    bullets = (o.get("bullet_points") or {}).get("de") or []
-    desc = (o.get("_description") or "")
-    if bullets:
-        desc = "• " + "\n• ".join(bullets) + "\n" + desc
+def _record(o, images):
+    if o.get("offer_type") != "rent":
+        return None
+    code = _code(o["id"])
+    street = " ".join(x for x in (o.get("route"), o.get("street_number")) if x) or None
     return {
         "source": NAME,
         "source_id": o["id"],
-        "url": f"https://realadvisor.ch/de/kaufen/wohnung/{_code(o['id'])}",
-        "title": title or f"{o.get('number_of_rooms') or ''} Zimmer Wohnung, {o.get('locality') or ''}",
-        "description": desc,
-        "price": o.get("sale_price"),
+        "url": DETAIL.format(code=code),
+        "title": o.get("title"),
+        "description": "",
+        "price": o.get("gross_rent_monthly"),
         "rooms": o.get("number_of_rooms"),
-        "living_area": o.get("living_surface") or o.get("computed_surface"),
-        "usable_area": o.get("usable_surface"),
+        "living_area": o.get("computed_surface"),
         "bathrooms": o.get("number_of_bathrooms"),
-        "parking_spaces": o.get("number_of_parking"),
-        "street": " ".join(x for x in [o.get("route"), o.get("street_number")] if x) or None,
+        "street": street,
         "zip": o.get("postcode"),
         "city": o.get("locality"),
         "lat": o.get("lat"),
         "lng": o.get("lng"),
         "year_built": o.get("construction_year"),
-        "year_renovated": o.get("renovation_year"),
-        "images": [_image(i) for i in (o.get("images") or [])[:6] if i.get("file_name")],
+        "images": [images[code]] if code in images else [],
         "agency": o.get("agency_name"),
-        "agency_phone": o.get("agency_contact_phone_number"),
-        "published": o.get("created_at"),
+        "published": o.get("min_created_at") or o.get("created_at"),
     }
 
 
-def scrape(http, ctx):
-    day = ctx["day"]
-    for i, (name, canton, district, zips) in enumerate(MUNICIPALITIES):
-        slug = realadvisor_slug(name, zips)
-        if not slug:
-            continue
-        r = http.get(BASE.format(slug=slug, suffix=""), allow_404=True)
+def _crawl(http, ctx, place, segment, daily_pages):
+    r = http.get(BASE.format(place=place, segment=segment), allow_404=True)
+    if r is None:
+        return
+    listings, total, images = _parse(r.text)
+    for o in listings:
+        rec = _record(o, images)
+        if rec:
+            yield rec
+    # ?page=N is only partly honoured by the site (page 3+ repeat page 2): read at most `daily_pages`
+    for page in range(2, min(daily_pages, -(-total // 24)) + 1):
+        r = http.get(BASE.format(place=place, segment=segment), params={"page": page}, allow_404=True)
         if r is None:
+            break
+        listings, _, images = _parse(r.text)
+        if not listings:
+            break
+        for o in listings:
+            rec = _record(o, images)
+            if rec:
+                yield rec
+
+
+# towns with many ads get their own room-segment pages every day (each page shows the ~24 newest ads)
+BIG_TOWNS = {"2000", "2300", "2034", "2017", "2013", "2016", "2074", "2072", "2068", "2525", "2022", "2053", "2035",
+             "2052", "2520", "2105", "2206", "2056", "2088", "2087", "2012"}
+
+
+def scrape(http, ctx):
+    for segment in SEGMENTS:
+        yield from _crawl(http, ctx, "canton-neuchatel", segment, 2)
+    places = []
+    for l in sorted(LOCALITIES, key=lambda l: l["car_min"]):
+        if l["zip"] not in {z for z, _ in places}:
+            places.append((l["zip"], l["geo_name"]))
+    for i, (z, name) in enumerate(places):
+        big = z in BIG_TOWNS
+        if not big and (i + ctx["day"]) % 2:  # small places every second day
             continue
-        for o in _listings(r.text):
-            yield _record(o)
-        total = _total(r.text)
-        if total > 24 and (name in LARGE or (i + day) % 3 == 0):
-            for suffix in ROOM_SPLITS:
-                r2 = http.get(BASE.format(slug=slug, suffix=suffix), allow_404=True)
-                if r2 is None:
-                    continue
-                for o in _listings(r2.text):
-                    yield _record(o)
+        slug = f"{z}-{slugify(name)}"
+        for segment in (SEGMENTS if big else [""]):
+            yield from _crawl(http, ctx, slug, segment, 1)

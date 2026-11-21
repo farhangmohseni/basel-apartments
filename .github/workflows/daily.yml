@@ -2,11 +2,12 @@ name: Daily apartment search
 
 on:
   schedule:
-    - cron: "15 4 * * *"   # every day 06:15 Swiss summer time / 05:15 winter time
-  workflow_dispatch:        # "Run workflow" button for a manual run
+    - cron: "15 4 * * *"    # 06:15 Swiss summer time / 05:15 winter time - with e-mail
+    - cron: "15 15 * * *"   # 17:15 / 16:15 - data refresh only; new flats go into the next morning's e-mail
+  workflow_dispatch:         # "Run workflow" button for a manual run
     inputs:
       email:
-        description: "Send the e-mail (untick for a test run; new ads are then included in the next e-mail)"
+        description: "Send the e-mail (untick for a test run; new flats are then included in the next e-mail)"
         type: boolean
         default: true
 
@@ -20,7 +21,7 @@ concurrency:
 jobs:
   search:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
 
@@ -32,13 +33,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Scrape, merge and send e-mail
+      - name: Scrape, merge, commute times, e-mail
         env:
           SMTP_USER: ${{ secrets.SMTP_USER }}
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
           APP_URL: ${{ vars.APP_URL }}
-        run: python -m scraper.run ${{ github.event_name == 'workflow_dispatch' && !inputs.email && '--no-email' || '' }}
+          NO_EMAIL: ${{ (github.event_name == 'workflow_dispatch' && !inputs.email) || github.event.schedule == '15 15 * * *' }}
+        run: |
+          if [ "$NO_EMAIL" = "true" ]; then python -m scraper.run --no-email; else python -m scraper.run; fi
 
       - name: Save data
         if: always()
@@ -46,5 +49,6 @@ jobs:
           git config user.name "apartment-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/data
-          git commit -m "Daily data $(date -u +%F)" || echo "nothing to commit"
+          git commit -m "Data $(date -u +'%F %H:%M')" || echo "nothing to commit"
+          git pull --rebase -q || true
           git push

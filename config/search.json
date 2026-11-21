@@ -1,0 +1,16 @@
+{
+  "_comment": "Search profile. After changing workplace or max_car_minutes, rebuild the area with: python -m scraper.tools.build_localities",
+  "name": "Studio near Philip Morris Neuchâtel",
+  "offer": "rent",
+  "workplace": {
+    "name": "Philip Morris International (The Cube)",
+    "short": "PMI",
+    "address": "Quai Jeanrenaud 3, 2000 Neuchâtel",
+    "lat": 46.97905,
+    "lng": 6.89517
+  },
+  "max_car_minutes": 25,
+  "max_rooms": 3,
+  "max_rent": 2500,
+  "commute_arrival_time": "08:00"
+}

@@ -1,29 +1,23 @@
 {
-  "price_min": 800000,
-  "price_max": 2000000,
-  "rooms_min": 3,
-  "rooms_max": 5,
-  "area_min": 80,
+  "_comment": "Criteria for the daily e-mail (rent per month, CHF). null = no limit. Easiest: set the filters in the app and use 'Copy as e-mail filter (JSON)', then paste it here. commute_mode: either | car | pt | both.",
+  "rent_min": null,
+  "rent_max": null,
+  "rooms_min": null,
+  "rooms_max": null,
+  "area_min": null,
   "area_max": null,
-  "price_per_m2_max": null,
-  "year_built_min": null,
-  "cantons": [
-    "BS",
-    "BL"
-  ],
-  "districts": [],
-  "municipalities": [
-    "Basel",
-    "Binningen",
-    "Riehen"
-  ],
+  "rent_per_m2_max": null,
+  "max_car_min": null,
+  "max_pt_min": null,
+  "commute_mode": "either",
+  "cantons": [],
+  "localities": [],
+  "types": [],
+  "exclude_types": [],
+  "furnished": "any",
   "require_features": [],
   "exclude_features": [],
-  "exclude_keywords": [
-    "Tauschwohnung"
-  ],
+  "exclude_keywords": [],
   "include_keywords_any": [],
-  "exclude_types": [],
-  "include_missing_values": true,
-  "include_unknown_location": false
+  "include_missing_values": true
 }
