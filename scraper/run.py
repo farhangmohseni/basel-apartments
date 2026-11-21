@@ -62,7 +62,7 @@ def run_source(mod, http, ctx):
                 seen.add(r["source_id"])
                 recs.append(r)
     except Blocked as e:
-        status = f"blocked ({e})"
+        status = f"partly read – then {e}" if recs else f"blocked ({e})"
     except Exception as e:  # keep the other sources running
         status = f"error: {e.__class__.__name__}: {e}"
         log.error("source %s failed:\n%s", mod.NAME, traceback.format_exc())
