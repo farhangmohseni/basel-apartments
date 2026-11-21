@@ -29,5 +29,6 @@
   "exclude_features": [],
   "exclude_keywords": [],
   "include_keywords_any": [],
-  "include_missing_values": true
+  "include_missing_values": true,
+  "require_rent": true
 }
